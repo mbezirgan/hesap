@@ -1,4 +1,5 @@
 use eframe::egui;
+use eframe::egui::TextBuffer;
 use eframe::emath::GuiRounding;
 
 fn main() -> eframe::Result {
@@ -17,11 +18,54 @@ fn main() -> eframe::Result {
     )
 }
 
-struct MyApp {
+const MAX_DIGITS: usize = 15;
 
+struct MyApp {
+    // Keep current display as string to not have to worry about rounding errors
+    display: String,
+    memory: f64,
+    fractional: bool,
+    negative: bool
 }
 
 impl MyApp {
+    fn display_string(&self) -> String {
+        if self.negative {
+            format!("-{}", self.display)
+        } else {
+            format!("{}", self.display)
+        }
+    }
+
+    fn digits_for_display(&self) -> usize {
+        // use abs to ignore neg sign
+        let len = self.display.len();
+        let fraction_size = usize::from(self.fractional);
+        len - fraction_size
+    }
+
+    fn be_fractional(&mut self) {
+        if !self.fractional {
+            self.fractional = true;
+            self.display.push('.');
+        }
+    }
+
+    fn reset(&mut self) {
+        self.memory = 0.0;
+        self.fractional = false;
+        self.negative = false;
+        self.display.clear();
+        self.display.push('0');
+    }
+
+    fn add_number(&mut self, number: &str) {
+        if self.display == "0" {
+            self.display.clear();
+        }
+        self.display.push_str(number);
+    }
+
     #[allow(clippy::cast_precision_loss)]
     fn buttons(&mut self, ui: &mut egui::Ui, spacing: f32) {
         let layout = [
@@ -75,7 +119,24 @@ impl MyApp {
                     };
 
                     if ui.add_sized(btn_size, button).clicked() {
-
+                        // TODO: use enum for layout instead of string
+                        match button_type {
+                            ButtonType::Operator => todo!(),
+                            ButtonType::Other => {
+                                match label {
+                                    "CE" | "C" => self.reset(),
+                                    "+/-" => self.negative = !self.negative,
+                                    "." => self.be_fractional(),
+                                    _ => todo!()
+                                }
+                            }
+                            ButtonType::Number => {
+                                let digits = self.digits_for_display();
+                                if digits < MAX_DIGITS {
+                                    self.add_number(label);
+                                }
+                            }
+                        }
                     }
                 }
             });
@@ -85,7 +146,12 @@ impl MyApp {
 
 impl Default for MyApp {
     fn default() -> Self {
-        MyApp {}
+        MyApp {
+            display: String::from("0"),
+            memory: 0.0,
+            fractional: false,
+            negative: false,
+        }
     }
 }
 
@@ -119,10 +185,11 @@ fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
                         ui.with_layout(
                             egui::Layout::right_to_left(egui::Align::Center),
                             |ui| {
-                                let label = egui::Label::new(                                    egui::RichText::new("2.26562423")
-                                    .size(font_size)
-                                    .color(egui::Color32::WHITE)
-                                    .monospace()
+                                let label = egui::Label::new(
+                                    egui::RichText::new(&self.display_string())
+                                        .size(font_size)
+                                        .color(egui::Color32::WHITE)
+                                        .monospace()
                                 ).truncate();
                                 ui.add(label);
                             }
