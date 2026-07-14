@@ -3,8 +3,9 @@ name = "hesap"
 version = "0.1.0"
 edition = "2024"
 
-[lints.rust]
-warnings = "deny"
+# TODO: run this only before publish/commit/ect
+# [lints.rust]
+# warnings = "deny"
 
 [lints.clippy]
 warnings = "deny"
