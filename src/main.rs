@@ -1,6 +1,7 @@
 use eframe::egui;
-use eframe::egui::TextBuffer;
 use eframe::emath::GuiRounding;
+use eframe::wgpu::wgc::binding_model::BindingZone::Stage;
+use hesap::DisplayNumber;
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -22,48 +23,15 @@ const MAX_DIGITS: usize = 15;
 
 struct MyApp {
     // Keep current display as string to not have to worry about rounding errors
-    display: String,
+    // This is "kind" of like a decimal representation as this is a vec of u8
+    display: DisplayNumber,
     memory: f64,
-    fractional: bool,
-    negative: bool
 }
 
 impl MyApp {
-    fn display_string(&self) -> String {
-        if self.negative {
-            format!("-{}", self.display)
-        } else {
-            format!("{}", self.display)
-        }
-    }
-
-    fn digits_for_display(&self) -> usize {
-        // use abs to ignore neg sign
-        let len = self.display.len();
-        let fraction_size = usize::from(self.fractional);
-        len - fraction_size
-    }
-
-    fn be_fractional(&mut self) {
-        if !self.fractional {
-            self.fractional = true;
-            self.display.push('.');
-        }
-    }
-
     fn reset(&mut self) {
         self.memory = 0.0;
-        self.fractional = false;
-        self.negative = false;
         self.display.clear();
-        self.display.push('0');
-    }
-
-    fn add_number(&mut self, number: &str) {
-        if self.display == "0" {
-            self.display.clear();
-        }
-        self.display.push_str(number);
     }
 
     #[allow(clippy::cast_precision_loss)]
@@ -125,15 +93,15 @@ impl MyApp {
                             ButtonType::Other => {
                                 match label {
                                     "CE" | "C" => self.reset(),
-                                    "+/-" => self.negative = !self.negative,
-                                    "." => self.be_fractional(),
+                                    "+/-" => self.display.swap_sign(),
+                                    "." => self.display.be_fractional(),
                                     _ => todo!()
                                 }
                             }
                             ButtonType::Number => {
-                                let digits = self.digits_for_display();
+                                let digits = self.display.digits_used();
                                 if digits < MAX_DIGITS {
-                                    self.add_number(label);
+                                    self.display.add_number(label);
                                 }
                             }
                         }
@@ -147,10 +115,8 @@ impl MyApp {
 impl Default for MyApp {
     fn default() -> Self {
         MyApp {
-            display: String::from("0"),
             memory: 0.0,
-            fractional: false,
-            negative: false,
+            display: DisplayNumber::default()
         }
     }
 }
@@ -186,7 +152,7 @@ fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
                             egui::Layout::right_to_left(egui::Align::Center),
                             |ui| {
                                 let label = egui::Label::new(
-                                    egui::RichText::new(&self.display_string())
+                                    egui::RichText::new(self.display.to_string())
                                         .size(font_size)
                                         .color(egui::Color32::WHITE)
                                         .monospace()
