@@ -32,6 +32,7 @@ struct MyApp {
     // Keep current display as string to not have to worry about rounding errors
     // This is "kind" of like a decimal representation as this is a vec of u8
     input: DisplayNumber,
+    error: Option<&'static str>,
     memory: Decimal,
     mode: CalculatorMode
 }
@@ -40,6 +41,7 @@ impl MyApp {
     fn clear_entry(&mut self) {
         self.input.clear();
         self.mode = CalculatorMode::Input;
+        self.error = None;
     }
 
     fn clear(&mut self) {
@@ -49,16 +51,26 @@ impl MyApp {
     }
 
     #[must_use]
-    fn evaluate(&self) -> Decimal {
+    fn evaluate(&self) -> Result<Decimal, &'static str> {
         let left = self.memory;
         let right = self.input.to_decimal();
         match self.mode {
-            CalculatorMode::Input => left,
-            CalculatorMode::Addition => left + right,
-            CalculatorMode::Subtraction => left - right,
-            CalculatorMode::Multiplication => left * right,
-            CalculatorMode::Division => left / right
+            CalculatorMode::Input => Ok(left),
+            CalculatorMode::Addition => Ok(left + right),
+            CalculatorMode::Subtraction => Ok(left - right),
+            CalculatorMode::Multiplication => Ok(left * right),
+            CalculatorMode::Division => {
+                if right == Decimal::zero() {
+                    return Err("Division by zero");
+                }
+                Ok(left / right)
+            }
         }
+    }
+
+    #[must_use]
+    fn display_output(&self) -> String {
+        self.error.map_or_else(|| self.input.to_string(), ToString::to_string)
     }
 
     #[allow(clippy::cast_precision_loss)]
@@ -128,8 +140,15 @@ impl MyApp {
                                     "+" => self.mode = CalculatorMode::Addition,
                                     "=" => {
                                         let result = self.evaluate();
-                                        self.input.set_decimal(result);
-                                        self.mode = CalculatorMode::Input;
+                                        match result {
+                                            Ok(value) => {
+                                                self.input.set_decimal(value);
+                                                self.mode = CalculatorMode::Input;
+                                            }
+                                            Err(err) => {
+                                                self.error = Some(err);
+                                            }
+                                        }
                                     },
                                     _ => todo!()
                                 }
@@ -143,9 +162,9 @@ impl MyApp {
                                     "%" => {
                                         /* NOTE: we could use the string representation
                                            and just move the decimal */
-                                        let percentage = self.input.to_f64();
-                                        let value = percentage / 100.0;
-                                        self.input.set_f64(value);
+                                        let percentage = self.input.to_decimal();
+                                        let value = percentage / Decimal::from_u8(100).unwrap();
+                                        self.input.set_decimal(value);
                                     }
                                     _ => todo!()
                                 }
@@ -168,6 +187,7 @@ impl Default for MyApp {
     fn default() -> Self {
         MyApp {
             memory: Decimal::zero(),
+            error: None,
             input: DisplayNumber::default(),
             mode: CalculatorMode::Input
         }
@@ -205,7 +225,7 @@ fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
                             egui::Layout::right_to_left(egui::Align::Center),
                             |ui| {
                                 let label = egui::Label::new(
-                                    egui::RichText::new(self.input.to_string())
+                                    egui::RichText::new(self.display_output())
                                         .size(font_size)
                                         .color(egui::Color32::WHITE)
                                         .monospace()
