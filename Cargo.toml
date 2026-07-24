@@ -13,3 +13,4 @@ pedantic = "warn"
 
 [dependencies]
 eframe = "0.35.0"
+rust_decimal = "1.42.1"

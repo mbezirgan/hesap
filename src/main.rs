@@ -1,5 +1,8 @@
 use eframe::egui;
 use eframe::emath::GuiRounding;
+
+use rust_decimal::prelude::*;
+
 use hesap::DisplayNumber;
 
 fn main() -> eframe::Result {
@@ -29,7 +32,7 @@ struct MyApp {
     // Keep current display as string to not have to worry about rounding errors
     // This is "kind" of like a decimal representation as this is a vec of u8
     input: DisplayNumber,
-    memory: f64,
+    memory: Decimal,
     mode: CalculatorMode
 }
 
@@ -40,15 +43,15 @@ impl MyApp {
     }
 
     fn clear(&mut self) {
-        self.memory = 0.0;
+        self.memory = Decimal::zero();
         self.mode = CalculatorMode::Input;
         self.clear_entry();
     }
 
     #[must_use]
-    fn evaluate(&self) -> f64 {
+    fn evaluate(&self) -> Decimal {
         let left = self.memory;
-        let right = self.input.to_f64();
+        let right = self.input.to_decimal();
         match self.mode {
             CalculatorMode::Input => left,
             CalculatorMode::Addition => left + right,
@@ -115,7 +118,7 @@ impl MyApp {
                         match button_type {
                             ButtonType::Operator => {
                                 if matches!(self.mode, CalculatorMode::Input) {
-                                    self.memory = self.input.to_f64();
+                                    self.memory = self.input.to_decimal();
                                     self.input.clear();
                                 }
                                 match label {
@@ -125,7 +128,7 @@ impl MyApp {
                                     "+" => self.mode = CalculatorMode::Addition,
                                     "=" => {
                                         let result = self.evaluate();
-                                        self.input.set_f64(result);
+                                        self.input.set_decimal(result);
                                         self.mode = CalculatorMode::Input;
                                     },
                                     _ => todo!()
@@ -164,7 +167,7 @@ impl MyApp {
 impl Default for MyApp {
     fn default() -> Self {
         MyApp {
-            memory: 0.0,
+            memory: Decimal::zero(),
             input: DisplayNumber::default(),
             mode: CalculatorMode::Input
         }

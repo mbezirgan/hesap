@@ -1,6 +1,10 @@
 use std::fmt::Write;
 use std::fmt::{Display, Formatter};
+use std::ops::Neg;
+use rust_decimal::prelude::*;
 
+// Special type to make sure no matter what the internal data type used for calculations is
+// The user input string will act like the user expects
 pub struct DisplayNumber {
     string: String,
     negative: bool
@@ -36,13 +40,30 @@ impl DisplayNumber {
         self.negative = !self.negative;
     }
 
+    // NOTE: no testing used as this uses Decimal libraries implementation
+    #[allow(clippy::missing_panics_doc)]
+    #[must_use]
+    pub fn to_decimal(&self) -> Decimal {
+        // Due to how the string is being created this CANNOT fail
+        let value = Decimal::from_str(&self.string).unwrap();
+        if self.negative { value.neg() } else { value }
+    }
+
+    pub fn set_decimal(&mut self, value: Decimal) {
+        self.negative = value.is_sign_negative();
+        let value = value.abs();
+
+        self.string.clear();
+        // write! doesn't fail on string
+        write!(&mut self.string, "{value}").unwrap();
+    }
+
     #[allow(clippy::missing_panics_doc)]
     #[must_use]
     pub fn to_f64(&self) -> f64 {
         // Due to how the string is being created this CANNOT fail
         let value: f64 = self.string.parse().unwrap();
-        let sign = if self.negative { -1.0 } else { 1.0 };
-        value * sign
+        if self.negative { value.neg() } else { value }
     }
 
     pub fn set_f64(&mut self, value: f64) {
