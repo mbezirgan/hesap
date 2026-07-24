@@ -1,6 +1,5 @@
 use eframe::egui;
 use eframe::emath::GuiRounding;
-use eframe::wgpu::wgc::binding_model::BindingZone::Stage;
 use hesap::DisplayNumber;
 
 fn main() -> eframe::Result {
@@ -21,17 +20,42 @@ fn main() -> eframe::Result {
 
 const MAX_DIGITS: usize = 15;
 
+enum CalculatorMode {
+    Input,
+    Addition, Subtraction, Multiplication, Division
+}
+
 struct MyApp {
     // Keep current display as string to not have to worry about rounding errors
     // This is "kind" of like a decimal representation as this is a vec of u8
-    display: DisplayNumber,
+    input: DisplayNumber,
     memory: f64,
+    mode: CalculatorMode
 }
 
 impl MyApp {
-    fn reset(&mut self) {
+    fn clear_entry(&mut self) {
+        self.input.clear();
+        self.mode = CalculatorMode::Input;
+    }
+
+    fn clear(&mut self) {
         self.memory = 0.0;
-        self.display.clear();
+        self.mode = CalculatorMode::Input;
+        self.clear_entry();
+    }
+
+    #[must_use]
+    fn evaluate(&self) -> f64 {
+        let left = self.memory;
+        let right = self.input.to_f64();
+        match self.mode {
+            CalculatorMode::Input => left,
+            CalculatorMode::Addition => left + right,
+            CalculatorMode::Subtraction => left - right,
+            CalculatorMode::Multiplication => left * right,
+            CalculatorMode::Division => left / right
+        }
     }
 
     #[allow(clippy::cast_precision_loss)]
@@ -89,19 +113,44 @@ impl MyApp {
                     if ui.add_sized(btn_size, button).clicked() {
                         // TODO: use enum for layout instead of string
                         match button_type {
-                            ButtonType::Operator => todo!(),
+                            ButtonType::Operator => {
+                                if matches!(self.mode, CalculatorMode::Input) {
+                                    self.memory = self.input.to_f64();
+                                    self.input.clear();
+                                }
+                                match label {
+                                    "/" => self.mode = CalculatorMode::Division,
+                                    "*" => self.mode = CalculatorMode::Multiplication,
+                                    "-" => self.mode = CalculatorMode::Subtraction,
+                                    "+" => self.mode = CalculatorMode::Addition,
+                                    "=" => {
+                                        let result = self.evaluate();
+                                        self.input.set_f64(result);
+                                        self.mode = CalculatorMode::Input;
+                                    },
+                                    _ => todo!()
+                                }
+                            },
                             ButtonType::Other => {
                                 match label {
-                                    "CE" | "C" => self.reset(),
-                                    "+/-" => self.display.swap_sign(),
-                                    "." => self.display.be_fractional(),
+                                    "C" => self.clear(),
+                                    "CE" => self.clear_entry(),
+                                    "+/-" => self.input.swap_sign(),
+                                    "." => self.input.be_fractional(),
+                                    "%" => {
+                                        /* NOTE: we could use the string representation
+                                           and just move the decimal */
+                                        let percentage = self.input.to_f64();
+                                        let value = percentage / 100.0;
+                                        self.input.set_f64(value);
+                                    }
                                     _ => todo!()
                                 }
                             }
                             ButtonType::Number => {
-                                let digits = self.display.digits_used();
+                                let digits = self.input.digits_used();
                                 if digits < MAX_DIGITS {
-                                    self.display.add_number(label);
+                                    self.input.add_number(label);
                                 }
                             }
                         }
@@ -116,7 +165,8 @@ impl Default for MyApp {
     fn default() -> Self {
         MyApp {
             memory: 0.0,
-            display: DisplayNumber::default()
+            input: DisplayNumber::default(),
+            mode: CalculatorMode::Input
         }
     }
 }
@@ -152,7 +202,7 @@ fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
                             egui::Layout::right_to_left(egui::Align::Center),
                             |ui| {
                                 let label = egui::Label::new(
-                                    egui::RichText::new(self.display.to_string())
+                                    egui::RichText::new(self.input.to_string())
                                         .size(font_size)
                                         .color(egui::Color32::WHITE)
                                         .monospace()

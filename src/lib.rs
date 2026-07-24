@@ -1,3 +1,4 @@
+use std::fmt::Write;
 use std::fmt::{Display, Formatter};
 
 pub struct DisplayNumber {
@@ -42,6 +43,15 @@ impl DisplayNumber {
         let value: f64 = self.string.parse().unwrap();
         let sign = if self.negative { -1.0 } else { 1.0 };
         value * sign
+    }
+
+    pub fn set_f64(&mut self, value: f64) {
+        self.negative = value < 0.0;
+        let value = value.abs();
+
+        self.string.clear();
+        // write! doesn't fail on string
+        write!(&mut self.string, "{value}").unwrap();
     }
 }
 
@@ -147,5 +157,22 @@ mod tests {
         num.be_fractional();
         add_235(&mut num);
         assert_eq!(num.to_f64(), 235.235);
+
+        num.clear();
+        num.be_fractional();
+        assert_eq!(num.to_f64(), 0.0);
+    }
+
+    #[test]
+    fn set_f64() {
+        let mut num = DisplayNumber::default();
+        num.set_f64(232.5);
+        assert_eq!(num.to_string(), "232.5");
+
+        num.set_f64(-32.5);
+        assert_eq!(num.to_string(), "-32.5");
+
+        num.set_f64(0.0);
+        assert_eq!(num.to_string(), "0");
     }
 }
