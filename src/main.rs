@@ -290,6 +290,8 @@ fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
         self.buttons(ui, spacing);
     });
 
+    let mut copy_txt: Option<String> = None;
+
     // Keyboard Input
     ui.input_mut(|i| {
         for event in &i.events {
@@ -302,6 +304,21 @@ fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
                 egui::Event::Key { key: egui::Key::Backspace, pressed: true, .. } => {
                     println!("Pressed Backspace");
                     self.input.remove_char();
+                },
+                // NOTE: Paste and Copy handle proper event order
+                // (like user trying to copy from a text field) so this won't intefier with that
+                egui::Event::Paste(text) => {
+                    println!("Clipboard paste: {text}");
+                    // Use decimal libraries input handling
+                    match Decimal::from_str(text) {
+                        Ok(decimal) => self.input.set_decimal(decimal),
+                        Err(_) => self.error = Some("Invalid Input"),
+                    }
+                }
+                egui::Event::Copy => {
+                    let display = self.display_output();
+                    println!("Clipboard copy: {display}");
+                    copy_txt = Some(display);
                 }
                 egui::Event::Text(text) => {
                     println!("Text input: {text}");
@@ -336,8 +353,12 @@ fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
                 _ => (),
             }
         }
-
     });
+
+    // Deffer copy_text so that ui isn't modified inside input_mut
+    if let Some(str) = copy_txt {
+        ui.copy_text(str);
+    }
 }
 
 }
