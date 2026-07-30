@@ -15,8 +15,8 @@ Hesap supports both mouse and keyboard input with special mappings for:
 
 | Key        | Button |
 |------------|--------|
-| c          | CE     |
-| C          | C      |  
+| c          | C      |
+| C          | CE     |  
 | = OR Enter | =      |  
 | s          | +/-    |  
 | . OR ,     | .      |  
