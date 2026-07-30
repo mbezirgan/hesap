@@ -5,7 +5,7 @@ use eframe::emath::GuiRounding;
 
 use rust_decimal::prelude::*;
 
-use hesap::DisplayNumber;
+use hesap::{Digit, DisplayNumber};
 
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
@@ -28,6 +28,66 @@ const MAX_DIGITS: usize = 15;
 enum CalculatorMode {
     Input,
     Addition, Subtraction, Multiplication, Division
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ButtonType {
+    Operator,
+    Other,
+    Number
+}
+
+
+#[derive(Debug, Clone, Copy)]
+enum Button {
+    ClearEntry, Clear,
+    Number(Digit),
+    Multiply, Minus, Plus, Divide,
+    SignChange, Percentage,
+    Period,
+    Evaluate,
+}
+
+impl Button {
+    fn label(&self) -> &'static str {
+        match self {
+            Button::ClearEntry => "CE",
+            Button::Clear => "C",
+            Button::Number(digit) => digit.value_as_str(),
+            Button::Multiply => "*",
+            Button::Minus => "-",
+            Button::Plus => "+",
+            Button::Divide => "/",
+            Button::SignChange => "+/-",
+            Button::Percentage => "%",
+            Button::Period => ".",
+            Button::Evaluate => "=",
+        }
+    }
+
+    fn button_type(&self) -> ButtonType {
+        match self {
+            Button::Divide | Button::Multiply | Button::Minus | Button::Plus | Button::Evaluate => crate::ButtonType::Operator,
+            Button::ClearEntry | Button::Clear | Button::Percentage | Button::SignChange | Button::Period => ButtonType::Other,
+            _ => ButtonType::Number,
+        }
+    }
+
+    fn egui_button(self, font_size: f32) -> egui::Button<'static> {
+        let txt = egui::RichText::new(self.label()).size(font_size).monospace();
+
+        match self.button_type() {
+            ButtonType::Operator =>
+                egui::Button::new(txt.color(egui::Color32::WHITE))
+                    .fill(egui::Color32::from_rgb(255, 149, 0)),
+            ButtonType::Other =>
+                egui::Button::new(txt)
+                    .fill(egui::Color32::from_rgb(80, 80, 80)),
+            ButtonType::Number =>
+                egui::Button::new(txt)
+                    .fill(egui::Color32::from_rgb(50, 50, 55))
+        }
+    }
 }
 
 struct MyApp {
@@ -54,14 +114,69 @@ impl MyApp {
         let right = self.input.to_decimal();
         match self.mode {
             CalculatorMode::Input => Ok(left),
-            CalculatorMode::Addition => Ok(left + right),
-            CalculatorMode::Subtraction => Ok(left - right),
-            CalculatorMode::Multiplication => Ok(left * right),
+            CalculatorMode::Addition => left.checked_add(right).ok_or("Addition overflow"),
+            CalculatorMode::Subtraction => left.checked_sub(right).ok_or("Subtraction overflow"),
+            CalculatorMode::Multiplication => left.checked_mul(right).ok_or("Multiplication overflow"),
             CalculatorMode::Division => {
                 if right == Decimal::zero() {
                     return Err("Division by zero");
                 }
-                Ok(left / right)
+                left.checked_div(right).ok_or("Division overflow")
+            }
+        }
+    }
+
+    fn enter(&mut self) {
+        match self.evaluate() {
+            Ok(value) => {
+                self.input.set_decimal(value);
+                self.mode = CalculatorMode::Input;
+            }
+            Err(err) => {
+                self.error = Some(err);
+            }
+        }
+    }
+
+    fn input_to_percentage(&mut self) {
+        /* NOTE: we could use the string representation
+           and just move the decimal */
+        let percentage = self.input.to_decimal();
+        let value = percentage / Decimal::from(100);
+        self.input.set_decimal(value);
+    }
+
+    fn on_button_press(&mut self, button: Button) {
+        match button.button_type() {
+            ButtonType::Operator => {
+                if matches!(self.mode, CalculatorMode::Input) {
+                    self.memory = self.input.to_decimal();
+                    self.input.clear();
+                }
+                match button {
+                    Button::Divide => self.mode = CalculatorMode::Division,
+                    Button::Multiply => self.mode = CalculatorMode::Multiplication,
+                    Button::Minus => self.mode = CalculatorMode::Subtraction,
+                    Button::Plus => self.mode = CalculatorMode::Addition,
+                    Button::Evaluate => self.enter(),
+                    _ => unreachable!()
+                }
+            },
+            ButtonType::Other => {
+                match button {
+                    Button::Clear => self.clear(),
+                    Button::ClearEntry => self.clear_entry(),
+                    Button::SignChange => self.input.swap_sign(),
+                    Button::Period => self.input.be_fractional(),
+                    Button::Percentage => self.input_to_percentage(),
+                    _ => unreachable!()
+                }
+            }
+            ButtonType::Number => {
+                let digits = self.input.digits_used();
+                if digits < MAX_DIGITS && let Button::Number(digit) = button {
+                    self.input.add_digit(digit);
+                }
             }
         }
     }
@@ -74,18 +189,23 @@ impl MyApp {
         }
     }
 
+    #[allow(clippy::enum_glob_use)]
+    const LAYOUT: [[Button; 4]; 5] =  {
+        use Button::*;
+        use Digit::*;
+        [
+            [ ClearEntry,    Clear,         Percentage,    Divide   ],
+            [ Number(Seven), Number(Eight), Number(Nine),  Multiply ],
+            [ Number(Four),  Number(Five),  Number(Six),   Minus    ],
+            [ Number(One),   Number(Two),   Number(Three), Plus     ],
+            [ SignChange,    Number(Zero),  Period,        Evaluate ],
+        ]
+    };
+
     #[allow(clippy::cast_precision_loss)]
     fn buttons(&mut self, ui: &mut egui::Ui, spacing: f32) {
-        let layout = [
-            [ "CE", "C", "%", "/"],
-            [  "7", "8", "9", "*"],
-            [  "4", "5", "6", "-"],
-            [  "1", "2", "3", "+"],
-            ["+/-", "0", ".", "="],
-        ];
-
-        let rows = layout.len() as f32;
-        let columns = layout[0].len() as f32;
+        let rows = Self::LAYOUT.len() as f32;
+        let columns = Self::LAYOUT[0].len() as f32;
 
         let btn_size = egui::vec2(
             (ui.available_width()) / columns - spacing * (columns - 1.0) / columns,
@@ -97,86 +217,11 @@ impl MyApp {
         let font_size = font_size.round_to_pixels(1.0 / 5.0);
 
         // button creation from: https://www.youtube.com/watch?v=hrFHcQXxGbs
-        for row in &layout {
+        for row in &Self::LAYOUT {
             ui.horizontal(|ui| {
-                for &label in row {
-                    enum ButtonType {
-                        Operator,
-                        Other,
-                        Number
-                    }
-
-                    let button_type = match label {
-                        "/" | "*" | "-" | "+" | "=" => ButtonType::Operator,
-                        "CE" | "C" | "%" | "+/-" | "." => ButtonType::Other,
-                        _ => ButtonType::Number,
-                    };
-
-                    let txt = egui::RichText::new(label).size(font_size).monospace();
-
-                    let button = match button_type {
-                        ButtonType::Operator =>
-                            egui::Button::new(txt.color(egui::Color32::WHITE))
-                                .fill(egui::Color32::from_rgb(255, 149, 0)),
-                        ButtonType::Other =>
-                            egui::Button::new(txt)
-                                .fill(egui::Color32::from_rgb(80, 80, 80)),
-                        ButtonType::Number =>
-                            egui::Button::new(txt)
-                                .fill(egui::Color32::from_rgb(50, 50, 55))
-                    };
-
-                    if ui.add_sized(btn_size, button).clicked() {
-                        // TODO: use enum for layout instead of string
-                        match button_type {
-                            ButtonType::Operator => {
-                                if matches!(self.mode, CalculatorMode::Input) {
-                                    self.memory = self.input.to_decimal();
-                                    self.input.clear();
-                                }
-                                match label {
-                                    "/" => self.mode = CalculatorMode::Division,
-                                    "*" => self.mode = CalculatorMode::Multiplication,
-                                    "-" => self.mode = CalculatorMode::Subtraction,
-                                    "+" => self.mode = CalculatorMode::Addition,
-                                    "=" => {
-                                        let result = self.evaluate();
-                                        match result {
-                                            Ok(value) => {
-                                                self.input.set_decimal(value);
-                                                self.mode = CalculatorMode::Input;
-                                            }
-                                            Err(err) => {
-                                                self.error = Some(err);
-                                            }
-                                        }
-                                    },
-                                    _ => todo!()
-                                }
-                            },
-                            ButtonType::Other => {
-                                match label {
-                                    "C" => self.clear(),
-                                    "CE" => self.clear_entry(),
-                                    "+/-" => self.input.swap_sign(),
-                                    "." => self.input.be_fractional(),
-                                    "%" => {
-                                        /* NOTE: we could use the string representation
-                                           and just move the decimal */
-                                        let percentage = self.input.to_decimal();
-                                        let value = percentage / Decimal::from(100);
-                                        self.input.set_decimal(value);
-                                    }
-                                    _ => todo!()
-                                }
-                            }
-                            ButtonType::Number => {
-                                let digits = self.input.digits_used();
-                                if digits < MAX_DIGITS {
-                                    self.input.add_number(label);
-                                }
-                            }
-                        }
+                for &button in row {
+                    if ui.add_sized(btn_size, button.egui_button(font_size)).clicked() {
+                        self.on_button_press(button);
                     }
                 }
             });
@@ -243,6 +288,55 @@ fn ui(&mut self, ui: &mut egui::Ui, _: &mut eframe::Frame) {
 
         // Use up the rest of the space for buttons
         self.buttons(ui, spacing);
+    });
+
+    // Keyboard Input
+    ui.input_mut(|i| {
+        for event in &i.events {
+            // Do it this way to handle potentially non-standard keyboard layouts
+            match event {
+                egui::Event::Key { key: egui::Key::Enter, pressed: true, .. } => {
+                    println!("Pressed Enter");
+                    self.on_button_press(Button::Evaluate);
+                }
+                egui::Event::Key { key: egui::Key::Backspace, pressed: true, .. } => {
+                    println!("Pressed Backspace");
+                    self.input.remove_char();
+                }
+                egui::Event::Text(text) => {
+                    println!("Text input: {text}");
+
+                    let text = &text[..];
+                    let button = match text {
+                        "/" => Button::Divide,
+                        "*" => Button::Multiply,
+                        "-" => Button::Minus,
+                        "+" => Button::Plus,
+                        "=" => Button::Evaluate,
+                        "c" => Button::Clear,
+                        "C" => Button::ClearEntry,
+                        "%" => Button::Percentage,
+                        "s" => Button::SignChange,
+                        "." | "," => Button::Period,
+                        "0" => Button::Number(Digit::Zero),
+                        "1" => Button::Number(Digit::One),
+                        "2" => Button::Number(Digit::Two),
+                        "3" => Button::Number(Digit::Three),
+                        "4" => Button::Number(Digit::Four),
+                        "5" => Button::Number(Digit::Five),
+                        "6" => Button::Number(Digit::Six),
+                        "7" => Button::Number(Digit::Seven),
+                        "8" => Button::Number(Digit::Eight),
+                        "9" => Button::Number(Digit::Nine),
+                        _ => continue,
+                    };
+
+                    self.on_button_press(button);
+                }
+                _ => (),
+            }
+        }
+
     });
 }
 

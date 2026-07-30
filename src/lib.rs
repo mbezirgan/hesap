@@ -29,11 +29,23 @@ impl DisplayNumber {
         }
     }
 
-    pub fn add_number(&mut self, number: &str) {
+    /// # Panics
+    ///
+    /// Panics if `digit` is greater than `9`.
+    pub fn add_digit(&mut self, digit: Digit) {
         if self.string == "0" {
             self.string.clear();
         }
-        self.string.push_str(number);
+
+        let ch = (digit.value() + b'0') as char;
+        self.string.push(ch);
+    }
+
+    pub fn remove_char(&mut self) {
+        self.string.pop();
+        if self.string.is_empty() {
+            self.string.push('0');
+        }
     }
 
     pub fn swap_sign(&mut self) {
@@ -95,15 +107,50 @@ impl Display for DisplayNumber {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum Digit { Zero, One, Two, Three, Four, Five, Six, Seven, Eight, Nine }
+
+impl Digit {
+    pub fn value(self) -> u8 {
+        match self {
+            Digit::Zero => 0,
+            Digit::One => 1,
+            Digit::Two => 2,
+            Digit::Three => 3,
+            Digit::Four => 4,
+            Digit::Five => 5,
+            Digit::Six => 6,
+            Digit::Seven => 7,
+            Digit::Eight => 8,
+            Digit::Nine => 9,
+        }
+    }
+
+    pub fn value_as_str(self) -> &'static str {
+        match self {
+            Digit::Zero => "0",
+            Digit::One => "1",
+            Digit::Two => "2",
+            Digit::Three => "3",
+            Digit::Four => "4",
+            Digit::Five => "5",
+            Digit::Six => "6",
+            Digit::Seven => "7",
+            Digit::Eight => "8",
+            Digit::Nine => "9",
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     // note no add_numbers will be added to DisplayNumber as this is meant purely for the calculator
     fn add_235(num: &mut DisplayNumber) {
-        num.add_number("2");
-        num.add_number("3");
-        num.add_number("5");
+        num.add_digit(Digit::Two);
+        num.add_digit(Digit::Three);
+        num.add_digit(Digit::Five);
     }
 
     fn make_235() -> DisplayNumber {
@@ -113,7 +160,7 @@ mod tests {
     }
 
     #[test]
-    fn add_numbers() {
+    fn add_digits() {
         let num = make_235();
         assert_eq!(num.to_string(), "235");
     }
@@ -122,7 +169,7 @@ mod tests {
     fn add_zero() {
         let mut num = DisplayNumber::default();
         assert_eq!(num.to_string(), "0");
-        num.add_number("0");
+        num.add_digit(Digit::Zero);
         assert_eq!(num.to_string(), "0");
     }
 
@@ -151,6 +198,22 @@ mod tests {
         num.be_fractional();
         add_235(&mut num);
         assert_eq!(num.to_string(), "235.235");
+    }
+
+    #[test]
+    fn remove_digits() {
+        let mut num = make_235();
+        num.remove_char();
+        assert_eq!(num.to_string(), "23");
+        num.be_fractional();
+        num.remove_char();
+        assert_eq!(num.to_string(), "23");
+        num.be_fractional();
+        assert_eq!(num.to_string(), "23.");
+        num.remove_char();
+        num.remove_char();
+        num.remove_char();
+        assert_eq!(num.to_string(), "0");
     }
 
     #[test]
