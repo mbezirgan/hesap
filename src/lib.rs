@@ -51,7 +51,7 @@ impl DisplayNumber {
 
     pub fn set_decimal(&mut self, value: Decimal) {
         self.negative = value.is_sign_negative();
-        let value = value.abs();
+        let value = value.abs().normalize();
 
         self.string.clear();
         // write! doesn't fail on string

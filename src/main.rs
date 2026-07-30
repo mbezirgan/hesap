@@ -1,3 +1,5 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use eframe::egui;
 use eframe::emath::GuiRounding;
 
@@ -29,8 +31,6 @@ enum CalculatorMode {
 }
 
 struct MyApp {
-    // Keep current display as string to not have to worry about rounding errors
-    // This is "kind" of like a decimal representation as this is a vec of u8
     input: DisplayNumber,
     error: Option<&'static str>,
     memory: Decimal,
@@ -40,7 +40,6 @@ struct MyApp {
 impl MyApp {
     fn clear_entry(&mut self) {
         self.input.clear();
-        self.mode = CalculatorMode::Input;
         self.error = None;
     }
 
@@ -50,7 +49,6 @@ impl MyApp {
         self.clear_entry();
     }
 
-    #[must_use]
     fn evaluate(&self) -> Result<Decimal, &'static str> {
         let left = self.memory;
         let right = self.input.to_decimal();
@@ -70,7 +68,10 @@ impl MyApp {
 
     #[must_use]
     fn display_output(&self) -> String {
-        self.error.map_or_else(|| self.input.to_string(), ToString::to_string)
+        match self.error {
+            Some(err) => err.to_owned(),
+            None => self.input.to_string(),
+        }
     }
 
     #[allow(clippy::cast_precision_loss)]
@@ -163,7 +164,7 @@ impl MyApp {
                                         /* NOTE: we could use the string representation
                                            and just move the decimal */
                                         let percentage = self.input.to_decimal();
-                                        let value = percentage / Decimal::from_u8(100).unwrap();
+                                        let value = percentage / Decimal::from(100);
                                         self.input.set_decimal(value);
                                     }
                                     _ => todo!()
