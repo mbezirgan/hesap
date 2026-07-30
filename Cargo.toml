@@ -2,6 +2,7 @@
 name = "hesap"
 version = "0.1.0"
 edition = "2024"
+license = "MIT OR Apache-2.0"
 
 # TODO: run this only before publish/commit/ect
 # [lints.rust]
